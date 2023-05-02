@@ -4,6 +4,9 @@
 // that describes a Thing of type https://ci.mines-stetienne.fr/kg/ontology#PhantomX
 robot_td("https://raw.githubusercontent.com/Interactions-HSG/example-tds/main/tds/leubot1.ttl").
 
+role_goal(R, G) :- role_mission(R, _, M) & mission_goal(M, G).
+goal_feasible(G) :- .relevant_plans({+!G[scheme(_)]}, LP) & LP \== [].
+
 /* Initial goals */
 !start. // the agent has the goal to start
 
@@ -16,6 +19,32 @@ robot_td("https://raw.githubusercontent.com/Interactions-HSG/example-tds/main/td
 @start_plan
 +!start : true <-
 	.print("Hello world").
+
++newOrg(WspName, OrgName, GoalToRecruitFor, RoleToRecruitFor) : true <-
+    // join org
+	joinWorkspace(WspName, WspId);
+
+	// focus on org and its artifacts
+	lookupArtifact(OrgName, OrgArtId);
+	focus(OrgArtId);
+
+    // focus on role and goal to recruit for
+	!focusAgent;
+
+    // adopt role
+	!can_achieve.
+
+ +!focusAgent : group(GroupName, _, _) & scheme(SchemeName, _, _) <-
+	lookupArtifact(GroupName, GroupId);
+	lookupArtifact(SchemeName, SchemeId);
+	focus(GroupId);
+	focus(SchemeId);
+	.print("focusing on: ", GroupName, " and ", SchemeName).
+
++!can_achieve : role_goal(R, G) & goal_feasible(G) <-
+    .print("can achieve: ", G, " with role: ", R);
+	adoptRole(R);
+	.print("adopted: ", R).
 
 /* 
  * Plan for reacting to the addition of the goal !manifest_temperature
@@ -37,10 +66,10 @@ robot_td("https://raw.githubusercontent.com/Interactions-HSG/example-tds/main/td
 	 * follow the instructions here: https://github.com/HSG-WAS-SS23/exercise-8/blob/main/README.md#test-with-the-real-phantomx-reactor-robot-arm
 	 */
 	// creates a ThingArtifact based on the TD of the robotic arm
-	makeArtifact("leubot1", "org.hyperagents.jacamo.artifacts.wot.ThingArtifact", [Location, true], Leubot1Id); 
+	makeArtifact("leubot1", "wot.ThingArtifact", [Location, true], Leubot1Id);
 	
 	// sets the API key for controlling the robotic arm as an authenticated user
-	//setAPIKey("77d7a2250abbdb59c6f6324bf1dcddb5")[artifact_id(leubot1)];
+	setAPIKey("4c001eb82c3c495a08bd7da8b48915bb")[artifact_id(leubot1)];
 
 	// invokes the action onto:SetWristAngle for manifesting the temperature with the wrist of the robotic arm
 	invokeAction("https://ci.mines-stetienne.fr/kg/ontology#SetWristAngle", ["https://www.w3.org/2019/wot/json-schema#IntegerSchema"], [Degrees])[artifact_id(leubot1)].

@@ -1,9 +1,15 @@
 // organization agent
 
+// renaming artifacts
+// operation(...)[artifactid]
+// [artifact.name(...)]
+
 /* Initial beliefs and rules */
 org_name("lab_monitoring_org"). // the agent beliefs that it can manage organizations with the id "lab_monitoting_org"
 group_name("monitoring_team"). // the agent beliefs that it can manage groups with the id "monitoring_team"
 sch_name("monitoring_scheme"). // the agent beliefs that it can manage schemes with the id "monitoring_scheme"
+
+role_goal(R, G) :- role_mission(R, _, M) & mission_goal(M, G).
 
 /* Initial goals */
 !start. // the agent has the goal to start
@@ -16,7 +22,36 @@ sch_name("monitoring_scheme"). // the agent beliefs that it can manage schemes w
 */
 @start_plan
 +!start : org_name(OrgName) & group_name(GroupName) & sch_name(SchemeName) <-
-  .print("Hello world").
+  .print("Hello world");
+  !setup_org(GroupName, OrgName, SchemeName).
+
++!setup_org(GroupName, OrgName, SchemeName) <-
+  // agent creates and joins an organization workspace
+  createWorkspace("tempMonitoringWorkspace");
+  joinWorkspace("tempMonitoringWorkspace", WspId);
+
+  // agent creates and focuses on an Organization Board artifact within the organization workspace
+  makeArtifact(OrgName, "ora4mas.nopl.OrgBoard", ["src/org/org-spec.xml"], OrgArtId);
+  focus(OrgArtId);
+
+  // agent uses the Organization Board artifact to create, and then focus on
+  createGroup(GroupName, monitoring_team, GroupArtId);
+  createScheme(SchemeName, monitoring_scheme, SchemeArtId);
+  focus(GroupArtId);
+  focus(SchemeArtId);
+
+  // agent broadcasts that a new organization is deployed under the name “lab_monitoring_org”
+  .broadcast(tell, newOrg(tempMonitoringWorkspace,OrgName));
+  .print("broadcasted newOrg for ", OrgName);
+
+  // agent waits until the Group Board artifact signals that a monitoring team has been well-formed
+  ?formationStatus(ok)[artifact_id(GroupArtId)];
+
+  // agent uses again the Group Board artifact to make the monitoring team responsible for the created monitoring scheme
+  addScheme(SchemeName)[artifact_id(GroupArtId)];
+
+  print("Monitoring team is now responsible for the monitoring scheme").
+
 
 /* 
  * Plan for reacting to the addition of the test-goal ?formationStatus(ok)
@@ -28,9 +63,28 @@ sch_name("monitoring_scheme"). // the agent beliefs that it can manage schemes w
 @test_formation_status_is_ok_plan
 +?formationStatus(ok)[artifact_id(G)] : group(GroupName,_,G)[artifact_id(OrgName)] <-
   .print("Waiting for group ", GroupName," to become well-formed");
+  !recruiting;
   .wait({+formationStatus(ok)[artifact_id(G)]}). // waits until the belief is added in the belief base
 
-/* 
++!recruiting : recruited(R) <-
+  .print("recruited: ", R);
+  .findall(G, (role_goal(Role,G) & R \== Role), Goal);
+  .print("goal to recruit for: ", Goal);
+  .print("role to recruit for: ", Role)
+  Goal = [GoalToRecruitFor];
+
+  ?role_goal(RoleToRecruitFor, GoalToRecruitFor);
+  .print("goal/role to recruit for: ", GoalToRecruitFor, ", ", RoleToRecruitFor);
+
+  .broadcast(tell, newOrg("tempMonitoringWorkspace", "lab_monitoring_org", GoalToRecruitFor, RoleToRecruitFor));
+  .print("broadcasted newOrg for ", GoalToRecruitFor, ", ", RoleToRecruitFor).
+
++!recruiting : true <-
+  .wait(15 * 1000); // initially wait for 15 seconds
+  .print("re-recruiting");
+  !recruiting.
+
+/*
  * Plan for reacting to the addition of the goal !inspect(OrganizationalArtifactId)
  * Triggering event: addition of goal !inspect(OrganizationalArtifactId)
  * Context: true (the plan is always applicable)
@@ -53,7 +107,8 @@ sch_name("monitoring_scheme"). // the agent beliefs that it can manage schemes w
 */
 @play_plan
 +play(Ag, Role, GroupId) : true <-
-  .print("Agent ", Ag, " adopted the role ", Role, " in group ", GroupId).
+  .print("Agent ", Ag, " adopted the role ", Role, " in group ", GroupId);
+  +recruited(Role).
 
 /* Import behavior of agents that work in CArtAgO environments */
 { include("$jacamoJar/templates/common-cartago.asl") }
